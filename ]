@@ -1,0 +1,264 @@
+var Graphics;
+(function() {
+	var instance;
+	function BrowserGraphics() {
+		if (typeof instance !== "undefined") {
+			return instance;
+		}
+		var imageDatas = {}; // Image data
+		var imagesStaticData = StaticData.getRawClass("images");
+		var bufCanvas; // A buffer context of a canvas where we put Images to
+		               // save their ImageData.
+		var imageDataPreloaded = false;
+		var imagesPreloaded = false;
+		var floorImages = {}; // A 5-dimensional hash-map used to store ImageData of floor tiles
+		                      // that are made of a central tile and transitions to 4 neighbors 
+		(function() {
+		// Create canvas and set its width and height to fit the biggest image
+			var canvas = document.createElement("canvas");
+			var w = 0, h = 0, d;
+			for (var i in imagesStaticData) {
+				for (var j in imagesStaticData[i]) {
+					d = imagesStaticData[i][j];
+					if (w < d.w) {
+						w = d.w;
+					}
+					if (h < d.h) {
+						h = d.h;
+					}
+				}
+			}
+			bufContext = canvas.getContext("2d");
+		});
+		/**
+		 * @name Graphics#cacheImages
+		 * 
+		 * Preload images from server. This method is only used to preload the
+		 * images whose names were specified on the game build stage. If you
+		 * need to preload some images for your modules that don't require
+		 * game rebuilding, use the classic "new Image().src" way.
+
+		 * @param {string} folder Name of folder. This should match folder 
+		 * 		names in StaticData.getRawClass("images").
+		 * @returns {Image} 
+		 * 
+		 */
+		Object.defineProperty(this, "cacheImages", {
+			value: function(folder) {
+				var image = new Image();
+				image.src = "./images/"+folder+"/"+filename+".png";
+			},
+			writable: false,
+			configurable: false,
+			enumerable: true
+		});
+		/**
+		 * @name Graphics#cacheImageData
+		 * 
+		 * Preloads images and builds their ImageData for usage in canvas 
+		 * contexts. As a result ImageData from each image in a particular 
+		 * folder will be saved for further use.
+		 * 
+		 * @param {string} folder Name of folder. This should match folder 
+		 * 		names in StaticData.getRawClass("images") ang in .images/ 
+		 * 		directory.
+		 * @returns {Image} 
+		 */
+		Object.defineProperty(this, "cacheImageData", {
+			value: function(folder) {
+				var imagesToLoad = 0; // Increases with each requested image,
+				                      // desreases with each loaded image.
+				for (var i in imagesStaticData[folder]) {
+					imagesToLoad++;
+					var imgdata = imagesStaticData[folder][i];
+					var image = new Image();
+					image.src = "./images/"+folder+"/"+imgdata.filename+".png";
+					image.onload = (function(w, h) {
+						return function() {
+							bufContext.clear();
+							bufContext.drawImage(image, 0, 0, w, h);
+							if (--imagesToLoad === 0) {
+								imageDataPreloaded = true;
+								if (imagesPreloaded) {
+									Events.fire("imagesCached");
+								}
+							}
+						}
+					})(imgdata.w, imgdata.h);
+				}
+			},
+			writable: false,
+			configurable: false,
+			enumerable: true
+		});
+		/**
+		 * @name Graphics#cacheImageData
+		 * 
+		 * Returns a cached ImageData. If ImageData is not cached, throws an 
+		 * Error.
+		 * 
+		 * @param {string} folder Name of folder. This should match folder 
+		 * 		names in StaticData.getRawClass("images").
+		 * @param {string} filename Name of a file
+		 * @returns {ImageData}
+		 * @example
+		 * // Returns ImageData of image ./images/chardoll/55.png
+		 * Graphics.getImageData("chardoll", "55");
+		 */
+		Object.defineProperty(this, "getImageData", {
+			value: function(folder, filename) {
+				try {
+					return imageDatas[folder][filename];
+				} catch (e) {
+					throw new Error("Image ./images/"+folder+"/"+filename+".png is not loaded");
+				}
+			},
+			writable: false,
+			configurable: false,
+			enumerable: true
+		});
+		/**
+		 * @name Graphics#setPixel
+		 * In ImageData object sets a particular pixel's color and alpha-channel
+		 * 
+		 * @param {ImageData} imageData What is returned by CanvasRenderingContext2D#getImageData
+		 * @param {number} x Coordinates of pixel
+		 * @param {number} y
+		 * @param {array} color Pixel's color and alpha channel coded as [r, g, b, a]
+		 */
+		Object.defineProrerty(this, "setPixel", {
+			value: function setPixel(imageData, x, y, color) {
+				// Установить цвет пикселя в ImageData
+				// imageData - объект ImageData
+				// color - [r,g,b,a]
+				var r = color[0];
+				var g = color[1];
+				var b = color[2];
+				var a = color[3];
+				imageData.data[(x + y * imageData.width) * 4] = r;
+				imageData.data[(x + y * imageData.width) * 4 + 1] = g;
+				imageData.data[(x + y * imageData.width) * 4 + 2] = b;
+				imageData.data[(x + y * imageData.width) * 4 + 3] = a;
+			},
+			writable: false,
+			configurable: false,
+			enumerable: true
+		});
+		/**
+		 * @name Graphics#getPixel
+		 * 
+		 * From an ImageData returns color and alpha channel of a particular
+		 * pixel
+		 * 
+		 * @param {ImageData} imageData What is returned by CanvasRenderingContext2D#getImageData
+		 * @param {number} x Coordinates of pixel
+		 * @param {number} y
+		 * @returns {array} Pixel's color and alpha channel coded as [r, g, b, a]
+		 */
+		Object.defineProrerty(this, "getPixel", {
+			value: function getPixel(imageData, x, y) {
+				// Получить цвет пикселя
+				// Формат: [r,g,b]
+				return [
+					imageData.data[(x + y * imageData.width) * 4],
+					imageData.data[(x + y * imageData.width) * 4 + 1],
+					imageData.data[(x + y * imageData.width) * 4 + 2],
+					imageData.data[(x + y * imageData.width) * 4 + 3]
+				];
+			},
+			writable: false,
+			configurable: false,
+			enumberable: true
+		});
+		/**
+		 * @name Graphics#getTransition
+		 * 
+		 * Builds ImageData that contains a smooth transition from a tile of one
+		 * type into a tile of another type
+		 * 
+		 * @param {ImageData} fromImageData ImageData of initial cell
+		 * @param {number[]} neighborIds of neighbor tiles. An array of four integers.
+		 *		First one is the one from north side, second — from east side and so on. 
+		 * 
+		 * @return {ImageData} ImageData object with smoothly appearing pixels from one side
+		 */
+		Object.defineProrerty(this, "getTransition", {
+			value: function getTransition(fromImageData, neighborIds) {
+				var floorImage = floorImages; // At first it as the hash-map, after the loop
+				                              // it will be either ImageData or undefined.
+				for (var i=0; i<5; i++) {
+				// Search for each index in hash-map of generated images
+					floorImage = floorImage[neighborIds[i]];
+					if (typeof floorImage === "undefined") {
+					// If one of indexes was not present, then floorImage is not generated,
+					// so if will be generated in this method.
+						break;
+					}
+				}
+				if (i !== 5) {
+				// If an image of such tile was already used (and thus was generated and 
+				// chaced), return the cached image
+					return floorImage;
+				} else {
+				// If an image of such tile was not generated and cached yet,
+				// generate and cache it
+					for (var i=0; i<4; i++) {				
+						if (neighborIds[i] !== floorId) {
+						// Check each side of 	
+							if (direction === 0) {
+							// Up
+								var iMin = 0, iMax = 32, jMin = 0, jMax = 4;
+							} else if (direction === 1) {
+							// Right
+								var iMin = 28, iMax = 32, jMin = 0,	jMax = 32;
+							} else if (direction === 2) {
+							// Down
+								var iMin = 0, iMax = 32, jMin = 28, jMax = 32;
+							} else if (direction === 3) {
+							// Left
+								iMin = 0;
+								iMax = 4;
+								jMin = 0;
+								jMax = 32;
+							}
+							for (var i=iMin; i<iMax; i++) {
+								for (var j=jMin; j<jMax; j++) {
+									var chance; // What is the chance a certain pixel on 
+												// initial image will be substituted with a
+												// pixel from the neighbor image.
+									// Less inherited pixels will be closer to the center of
+									// the initial image, more further from the center
+									if (i === 0 || i === 32 || j === 0 || j === 32) {
+										chance = 20;
+									} else if (i === 1 || i === 31 || j === 1 || j === 31) {
+										chance = 60;
+									} else if (i === 2 || i === 30 || j === 2 || j === 30) {
+										chance = 80;
+									} else {
+										chance = 90;
+									}
+									if (Math.floor(Math.random()*100) < chance) {
+										continue;
+									}
+									this.setPixel(imageData, i, j, getPixel(tileImageData, i, j));
+								}
+								j = 0;
+							}
+						}
+					}
+					floorImages[tileType] = chunk.ctx.getImageData(viewIndent.left, viewIndent.top, 32, 32);
+				}
+				// Neighbor image
+				bufContext.drawImage(tiles[tileType][0], 0, 0);
+				var tileImageData = tileImageCtx.getImageData(0, 0, 32, 32);
+				var iMin, iMax, jMin, jMax;
+				return imageData;
+			},
+			writable: false,
+			configurable: false,
+			enumerable: true
+		});
+		return instance = this;
+	}
+	window.Graphics = new Graphics();
+})();
